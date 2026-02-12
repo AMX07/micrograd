@@ -1,94 +1,60 @@
+#We need spl data structures for containing neural networks, as nn are basically huge math exp
 
 class Value:
-    """ stores a single scalar value and its gradient """
 
-    def __init__(self, data, _children=(), _op=''):
+    def __init__(self,data,_children=(), _op='', label=''): # op is operation?
         self.data = data
-        self.grad = 0
-        # internal variables used for autograd graph construction
-        self._backward = lambda: None
-        self._prev = set(_children)
-        self._op = _op # the op that produced this node, for graphviz / debugging / etc
+        self.grad = 0.0
+        self._backward = lambda: None 
+        self._prev = set(_children) #initally a tuple, but now a set for efficency
+        self._op = _op #opeartation that produced the node
+        self.label = label #?
 
-    def __add__(self, other):
-        other = other if isinstance(other, Value) else Value(other)
-        out = Value(self.data + other.data, (self, other), '+')
-
-        def _backward():
-            self.grad += out.grad
-            other.grad += out.grad
-        out._backward = _backward
-
-        return out
-
-    def __mul__(self, other):
-        other = other if isinstance(other, Value) else Value(other)
-        out = Value(self.data * other.data, (self, other), '*')
+    def __repr__(self):
+        return f"Value(data={self.data})"
+    
+    def __add__(self,other):
+        other = other if isinstance(other,Value) else Value(other)
+        out = Value(self.data + other.data, (self,other),'+')
 
         def _backward():
+            # gradient using chain rule = summation of local gradient + global gradient.
+            #dL/de we want
+            # we know, d = e + c, so dd/de = 1 (local derivative always 1 in addition ) and dL/dd = -2 (out.grad)
+            # therefore dL/de = 1 * -2 or self.grad = local derivative * child derivative = 1 * out.grad
+            self.grad += 1 * out.grad
+            other.grad += 1 * out.grad
+    
+    def __mul__(self,other):
+        other = other if isinstance(other,Value) else Value(other)
+        out = Value(self.data * other.data,(self,other),'*')
+        
+        def _backward():
+            #we want dL/da
+            # we know e = a*b, de/da = b and dL/de = out.grad (-2)
+            # dL/da = other.data * out.grad
             self.grad += other.data * out.grad
             other.grad += self.data * out.grad
-        out._backward = _backward
 
-        return out
-
-    def __pow__(self, other):
-        assert isinstance(other, (int, float)), "only supporting int/float powers for now"
-        out = Value(self.data**other, (self,), f'**{other}')
-
-        def _backward():
-            self.grad += (other * self.data**(other-1)) * out.grad
-        out._backward = _backward
-
-        return out
-
-    def relu(self):
-        out = Value(0 if self.data < 0 else self.data, (self,), 'ReLU')
-
-        def _backward():
-            self.grad += (out.data > 0) * out.grad
-        out._backward = _backward
-
-        return out
-
+    #topological sort, 
     def backward(self):
-
-        # topological order all of the children in the graph
-        topo = []
+        topo =[]
         visited = set()
         def build_topo(v):
             if v not in visited:
                 visited.add(v)
                 for child in v._prev:
                     build_topo(child)
-                topo.append(v)
-        build_topo(self)
+                
 
-        # go one variable at a time and apply the chain rule to get its gradient
-        self.grad = 1
-        for v in reversed(topo):
-            v._backward()
 
-    def __neg__(self): # -self
-        return self * -1
 
-    def __radd__(self, other): # other + self
-        return self + other
+            
 
-    def __sub__(self, other): # self - other
-        return self + (-other)
+        
+        
 
-    def __rsub__(self, other): # other - self
-        return other + (-self)
 
-    def __rmul__(self, other): # other * self
-        return self * other
 
-    def __truediv__(self, other): # self / other
-        return self * other**-1
 
-    def __rtruediv__(self, other): # other / self
-        return other * self**-1
-
-    def __repr__(self):
-        return f"Value(data={self.data}, grad={self.grad})"
+    
